@@ -1,0 +1,62 @@
+import path from 'path';
+import fs from 'fs';
+import { Repository, EntityRepository  } from "typeorm";
+
+import User from './../models/User';
+import uploadConfig from '../config/upload';
+import AppError from './../errors/AppError';
+
+interface UserDTO {
+	name: string;
+	email: string;
+	password: string;
+	avatar: string;
+	provider: boolean;
+}
+
+interface AvatarDTO {
+	id: string;
+	avatar: string;
+}
+
+@EntityRepository(User)
+export default class UsersRepository extends Repository<User> {
+	public async getById(id: string): Promise<User | undefined> {
+		return await this.findOne({ where: { id }});
+	}
+
+	public async getByEmail(email: string): Promise<User | undefined> {
+		return await this.findOne({ where: { email }});
+	}
+
+	public async createUser({ name, email, password, avatar, provider }: UserDTO): Promise<User> {
+		const user = this.create({ name, email, password, avatar, provider });
+
+		await this.save(user);
+
+		return user;
+	}
+
+	public async updateUserAvatar({ id, avatar }: AvatarDTO): Promise<User> {
+		const user = await this.findOne(id);
+
+		if (!user) {
+			throw new AppError('Only authenticade users can change avatar.', 401);
+		}
+
+		if (user.avatar) {
+			const userAvatarFilePath = path.join(uploadConfig.directory, user.avatar);
+			const userAvatarFileExists = await fs.promises.stat(userAvatarFilePath); 
+
+			if (userAvatarFileExists) {
+				await fs.promises.unlink(userAvatarFilePath);
+			}
+		}
+
+		user.avatar = avatar;
+
+		await this.save(user);
+
+		return user;
+	}
+}
